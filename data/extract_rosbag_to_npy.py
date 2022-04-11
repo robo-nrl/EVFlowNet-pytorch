@@ -11,12 +11,6 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 
-def _int64_feature(value):
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
-
-def _bytes_feature(value):
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
-
 def _save_events(args,
                  events,
                  image_times,
@@ -102,19 +96,20 @@ def filter_events(events, ts):
     i = np.searchsorted(tss[idx_array], ts)
     return [events[k] for k in idx_array[i:]]
 
+
 def main():
     parser = argparse.ArgumentParser(
         description=("Extracts grayscale and event images from a ROS bag and "
                      "saves them as TFRecords for training in TensorFlow."))
     parser.add_argument("--bag", dest="bag",
                         help="Path to ROS bag.",
-                        default='/media/cyrilsterling/D/EV-FlowNet-pth/data/outdoor_day2.bag')
+                        required=True)
     parser.add_argument("--prefix", dest="prefix",
                         help="Output file prefix.",
-                        default='outdoor_day2')
+                        required=True)
     parser.add_argument("--output_folder", dest="output_folder",
                         help="Output folder.",
-                        default='/media/cyrilsterling/D/EV-FlowNet-pth/data/mvsec/outdoor_day2')
+                        required=True)
     parser.add_argument("--max_aug", dest="max_aug",
                         help="Maximum number of images to combine for augmentation.",
                         type=int,
@@ -126,7 +121,7 @@ def main():
     parser.add_argument("--start_time", dest="start_time",
                         help="Time to start in the bag.",
                         type=float,
-                        default = 45.0)
+                        default = 0.0)
     parser.add_argument("--end_time", dest="end_time",
                         help="Time to end in the bag.",
                         type=float,
@@ -172,9 +167,8 @@ def main():
         t_end = t_start + args.end_time
 
     eps = 0.1
-    ifis = 0
     for topic, msg, t in bag.read_messages(
-            topics=['/davis/left/image_raw',
+        topics=['/davis/left/image_raw',
                     '/davis/right/image_raw',
                     '/davis/left/events',
                     '/davis/right/events'],
@@ -211,7 +205,7 @@ def main():
             image = np.reshape(image, (height, width))
 
             if isLeft:
-                cv2.imwrite("/media/cyrilsterling/D/EV-FlowNet-pth/data/mvsec2/indoor_flying1/left_image{:05d}.png".format(left_image_iter),image)
+                cv2.imwrite(os.path.join(args.output_folder, args.prefix, "left_image{:05d}.png".format(left_image_iter)),image)
                 if left_image_iter > 0:
                     left_image_times.append(time)
                 else:
@@ -221,7 +215,7 @@ def main():
                     left_events = filter_events(left_events, left_event_image_times[-1] - t_start)
                 left_image_iter += 1
             else:
-                cv2.imwrite("/media/cyrilsterling/D/EV-FlowNet-pth/data/mvsec/outdoor_day2/right_image{:05d}.png".format(right_image_iter),image)
+                cv2.imwrite(os.path.join(args.output_folder, args.prefix, "right_image{:05d}.png".format(right_image_iter)),image)
                 if right_image_iter > 0:
                     right_image_times.append(time)
                 else:

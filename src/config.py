@@ -1,24 +1,72 @@
 import argparse
+import os
+import torch
+from datetime import datetime
+
+def print_args(args):
+    #Print args
+    print(' ' * 20 + 'OPTIONS:')
+    for k, v in vars(args).items():
+        print(' ' * 20 + k + ': ' + str(v)) 
 
 def configs():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data_path',
-                        type=str,
-                        help="Path to data directory.",
-                        default='D://EV-FlowNet-pth/data/mvsec/')
-    parser.add_argument('--load_path',
-                        type=str,
-                        help="Path to saved model.",
-                        default='D://EV-FlowNet-pth/data/log/saver/')
-    parser.add_argument('--training_instance',
-                        type=str,
-                        help="Specific saved model to load. A new one will be generated if empty.",
-                        default='')
+    parser.add_argument("--root-dir",
+                        help="Root directory to save encoded data",
+                        default='/local/a/akosta/Datasets/MVSEC/')
+    parser.add_argument("--trainenv",
+                        help="Environment Name",
+                        choices=['indoor_flying1', 
+                                'indoor_flying2', 
+                                'indoor_flying3',
+                                'indoor_flying4',
+                                'outdoor_day1',
+                                'outdoor_day2',
+                                'outdoor_night1',
+                                'outdoor_night2',
+                                'outdoor_night3'],
+                        default='outdoor_day2')
+    parser.add_argument("--testenv",
+                        help="Environment Name",
+                        choices=['indoor_flying1', 
+                                'indoor_flying2', 
+                                'indoor_flying3',
+                                'indoor_flying4',
+                                'outdoor_day1',
+                                'outdoor_day2',
+                                'outdoor_night1',
+                                'outdoor_night2',
+                                'outdoor_night3'],
+                        default='indoor_flying1')
+    parser.add_argument("--sub-dir",
+                        help="Sub-directory specific to implementation",
+                        choices=['spf', #Spike-FlowNet - count, gray
+                                'evf'], #Ev-FlowNet - count, time, gray   
+                        default='evf')
+    
+    parser.add_argument("--save-path",
+                        help="Save results path",
+                        default='./results')
+
+    parser.add_argument("--arch",
+                        help="Architecture to use",
+                        choices=['EvFlownet', #Ev-FlowNet
+                                'SpikeFlowNet'], #Spike-FlowNet
+                        default='EvFlowNet')
     parser.add_argument('--batch_size',
                         type=int,
                         help="Training batch size.",
                         default=8)
+    parser.add_argument('--start_epoch',
+                        type=int,
+                        help="Epoch start number",
+                        default=0)
+    parser.add_argument('--epochs',
+                        type=int,
+                        help="Total number of epochs",
+                        default=150)
+    
     parser.add_argument('--initial_learning_rate',
                         type=float,
                         help="Initial learning rate.",
@@ -43,22 +91,16 @@ def configs():
                         action='store_true',
                         help='If true, batch norm will not be performed at each layer',
                         default=False)
+    parser.add_argument('--dt',
+                        type=int,
+                        help='Number of consecutive event-volumes between grayscale images to use',
+                        default=1)
     
     # Args for testing only.
-    
-    parser.add_argument('--test_skip_frames',
-                        action='store_true',
-                        help='If true, input images will be 4 frames apart.')
-    
-    parser.add_argument('--test_sequence',
+    parser.add_argument('--pretrained',
                         type=str,
-                        help="Name of the test sequence.",
-                        default='indoor_flying1')
-    parser.add_argument('--gt_path',
-                        type=str,
-                        help='Path to optical flow ground truth npz file.',
-                        default='D:\mvsec\indoor_flying1_gt_flow_dist.npz')
-    parser.add_argument('--test_plot',
+                        help="Pretrained model path")
+    parser.add_argument('--render',
                         action='store_true',
                         help='If true, the flow predictions will be visualized during testing.',
                         default=True)
@@ -66,7 +108,34 @@ def configs():
                         action='store_true',
                         help='If true, output flow will be saved to a npz file.',
                         default='')
+    parser.add_argument('--evaluate-interval',
+                        type=int,
+                        help='Evaluate after every N epochs',
+                        default=2)
+    parser.add_argument('--evaluate',
+                        action='store_true',
+                        help='If true, only run test',
+                        default='')
+    parser.add_argument('--gpus', 
+                        type=str, 
+                        help='gpus (default: 0)',
+                        default='0')
     
     
     args = parser.parse_args()
+
+    os.environ['CUDA_VISIBLE_DEVICES']= args.gpus
+
+    args.gt_path = os.path.join(args.root_dir, args.testenv, args.testenv + '_gt.hdf5')
+    args.hdf5_path = os.path.join(args.root_dir, args.testenv, args.testenv + '_data.hdf5')
+
+    timestamp = timestamp = datetime.now().strftime("%m-%d-%H:%M")
+
+    args.save_path = os.path.join(args.save_path, 'dt'+str(args.dt), timestamp)
+
+    if not os.path.exists(args.save_path):
+            os.makedirs(args.save_path)
+
+    args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     return args
