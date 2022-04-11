@@ -87,6 +87,7 @@ def main():
     # model
     model = EVFlowNet(args)
     if args.pretrained:
+        print('\n Loading pretrained model...')
         model_data = torch.load(args.pretrained)
         model.load_state_dict(model_data['state_dict'])
 
@@ -124,6 +125,8 @@ def main():
             is_best = EPE < best_EPE
             best_EPE = min(EPE, best_EPE)
             print('Best EPE: {}'.format(best_EPE))
+            if is_best:
+                print('Best model updated.')
             save_checkpoint({
                 'epoch': epoch + 1,
                 'arch': args.arch,

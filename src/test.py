@@ -25,7 +25,7 @@ def drawImageTitle(img, title):
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
                 (255, 255, 255),
-                thickness=1,
+                thickness=2,
                 bottomLeftOrigin=False)
     return img
 
