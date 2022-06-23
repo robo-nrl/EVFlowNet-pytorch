@@ -2,6 +2,8 @@ import os
 from tqdm import trange
 from tqdm import tqdm
 import numpy as np
+import json
+
 from datetime import datetime
 from losses import *
 
@@ -11,14 +13,18 @@ from torchvision import transforms
 import torchvision.transforms.functional as F
 
 from config import configs, print_args
-from data_loader import EventData
+from data_loader import EventData, VoxelData
 from EVFlowNet import EVFlowNet
+from FireFlowNet import FireFlowNet
 from test import test
 from util import flow2rgb, AverageMeter, save_checkpoint
 import pkbar
 import time
 
-def train(args, TrainLoader, model, optimizer, loss_fun, epoch):   
+from torch.utils.tensorboard import SummaryWriter
+
+def train(args, TrainLoader, model, optimizer, loss_fun, epoch, train_writer):   
+    global n_iter
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -44,6 +50,9 @@ def train(args, TrainLoader, model, optimizer, loss_fun, epoch):
             optimizer.step()
 
             losses.update(loss.item(), input.size(0))
+            train_writer.add_scalar('train_loss', loss.item(), n_iter)
+
+            n_iter += 1
             
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -58,9 +67,14 @@ def train(args, TrainLoader, model, optimizer, loss_fun, epoch):
     return losses.avg
 
 def main():
+    global n_iter
     args = configs()
     best_EPE = -1
+    n_iter = 0
+
     print_args(args)
+
+
 
     train_transform = transforms.Compose([
         transforms.ToPILImage(),
@@ -77,25 +91,44 @@ def main():
         transforms.ToTensor(),
     ])
 
-    TrainSet = EventData(data_folder_path=args.root_dir, split='train', dt=args.dt, transform=train_transform)
+    if args.encoding == 'time':
+        TrainSet = EventData(data_folder_path=args.root_dir, split='train', dt=args.dt, transform=train_transform)
+        TestSet = EventData(data_folder_path=args.root_dir, split='test', dt=args.dt, transform=test_transform)
+    elif args.encoding == 'voxel':
+        TrainSet = VoxelData(data_folder_path=args.root_dir, split='train', dt=args.dt, transform=train_transform)
+        TestSet = VoxelData(data_folder_path=args.root_dir, split='test', dt=args.dt, transform=test_transform)
+
     TrainLoader = torch.utils.data.DataLoader(dataset=TrainSet, batch_size=args.batch_size, shuffle=True)
-    
-    TestSet = EventData(data_folder_path=args.root_dir, split='test', dt=args.dt, transform=test_transform)
     TestLoader = torch.utils.data.DataLoader(dataset=TestSet, batch_size=1, shuffle=False)
+
+    #Summary Writers
+    train_writer = SummaryWriter(os.path.join(args.save_path,'train'))
+    test_writer = SummaryWriter(os.path.join(args.save_path,'test'))
+    flow_writer1000 = SummaryWriter(os.path.join(args.save_path,'test_flow1000'))
 
 
     # model
-    model = EVFlowNet(args)
+    if args.arch == 'evf':
+        model = EVFlowNet(args)
+    elif args.arch == 'fire':
+        model = FireFlowNet(args)
+        
     if args.pretrained:
         print('\n Loading pretrained model...')
         model_data = torch.load(args.pretrained)
         model.load_state_dict(model_data['state_dict'])
+        print('EPE from savel model = {}'.format(model_data['best_EPE']))
 
     model = model.to(args.device)
 
     model = torch.nn.DataParallel(model).to(args.device)
+    print(model)
 
     print('=> Everything will be saved to {}'.format(args.save_path))
+
+    #Dump config
+    with open(os.path.join(args.save_path, 'config.txt'), 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
 
     if args.evaluate:
         with torch.no_grad():
@@ -111,18 +144,23 @@ def main():
         print('\n*****************************************')
         print('Epoch: ' + str(epoch+1) + ' / ' + str(args.epochs))
 
-        train_loss = train(args, TrainLoader, model, optimizer, loss_fun, epoch)
+        train_loss = train(args, TrainLoader, model, optimizer, loss_fun, epoch, train_writer)
+        train_writer.add_scalar('mean_train_loss', train_loss, epoch)
 
         if (epoch+1)%args.evaluate_interval == 0:
             # evaluate on validation set
             print('\n\nEvaluating ...')
             with torch.no_grad():
-                EPE = test(args, TestLoader, model)
+                EPE = test(args, TestLoader, model, epoch, flow_writer1000)
+            test_writer.add_scalar('mean_EPE', EPE, epoch)
+
+            is_best = EPE < best_EPE
 
             if best_EPE < 0:
                 best_EPE = EPE
+                is_best = True
 
-            is_best = EPE < best_EPE
+            
             best_EPE = min(EPE, best_EPE)
             print('Best EPE: {}'.format(best_EPE))
             if is_best:

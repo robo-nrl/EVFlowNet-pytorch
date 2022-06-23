@@ -43,7 +43,7 @@ class upsample_and_predict_flow(nn.Module):
                                         int((self._ksize-1)/2), int((self._ksize-1)/2)))#对称padding
 
         self.upsample32 = general_conv2d(in_channels=self._in_channels,
-                                             out_channels=self._upsample_ch,
+                                             out_channels=32,
                                              ksize=self._ksize,
                                              strides=1,
                                              do_batch_norm=self._do_batch_norm,

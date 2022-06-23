@@ -2,6 +2,7 @@ import argparse
 import os
 import torch
 from datetime import datetime
+import json
 
 def print_args(args):
     #Print args
@@ -51,14 +52,24 @@ def configs():
 
     parser.add_argument("--arch",
                         help="Architecture to use",
-                        choices=['EvFlownet', #Ev-FlowNet
-                                'SpikeFlowNet'], #Spike-FlowNet
-                        default='EvFlowNet')
-    parser.add_argument('--batch_size',
+                        choices=['evf', #EvFlowNet
+                                'minievf',
+                                'microevf',
+                                'nanoevf',
+                                'picoevf',
+                                'spf', #SpikeFlowNet
+                                'fire'], #FireFlowNet
+                        default='evf')
+    parser.add_argument("--encoding",
+                        help="Data Encoding",
+                        choices=['time', #EvFlowNet original
+                                'voxel',], #EvFlowNet modified
+                        default='time')
+    parser.add_argument('--batch-size',
                         type=int,
                         help="Training batch size.",
                         default=8)
-    parser.add_argument('--start_epoch',
+    parser.add_argument('--start-epoch',
                         type=int,
                         help="Epoch start number",
                         default=0)
@@ -67,27 +78,27 @@ def configs():
                         help="Total number of epochs",
                         default=150)
     
-    parser.add_argument('--initial_learning_rate',
+    parser.add_argument('--initial-learning-rate', '--lr',
                         type=float,
                         help="Initial learning rate.",
                         default=3e-4)
-    parser.add_argument('--learning_rate_decay',
+    parser.add_argument('--learning-rate-decay',
                         type=float,
                         help='Rate at which the learning rate is decayed.',
                         default=0.9)
-    parser.add_argument('--smoothness_weight',
+    parser.add_argument('--smoothness-weight',
                         type=float,
                         help='Weight for the smoothness term in the loss function.',
                         default=0.5)
-    parser.add_argument('--image_height',
+    parser.add_argument('--image-height',
                         type=int,
                         help="Image height.",
                         default=256)
-    parser.add_argument('--image_width',
+    parser.add_argument('--image-width',
                         type=int,
                         help="Image width.",
                         default=256)
-    parser.add_argument('--no_batch_norm',
+    parser.add_argument('--no-batch-norm',
                         action='store_true',
                         help='If true, batch norm will not be performed at each layer',
                         default=False)
@@ -103,8 +114,8 @@ def configs():
     parser.add_argument('--render',
                         action='store_true',
                         help='If true, the flow predictions will be visualized during testing.',
-                        default=True)
-    parser.add_argument('--save_test_output',
+                        default=False)
+    parser.add_argument('--save-test-output',
                         action='store_true',
                         help='If true, output flow will be saved to a npz file.',
                         default='')
@@ -125,17 +136,38 @@ def configs():
     args = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES']= args.gpus
+    args.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    if args.arch == 'evf':
+            args.base_channels = 64
+    elif args.arch == 'minievf':
+            args.base_channels = 32
+    elif args.arch == 'microevf':
+            args.base_channels = 16
+    elif args.arch == 'nanoevf':
+            args.base_channels = 8
+    elif args.arch == 'picoevf':
+            args.base_channels = 4
+    elif args.arch == 'spf':
+            args.base_channels = 64
+    elif args.arch == 'fire':
+            args.base_channels = 32
+
+    if args.encoding == 'time':
+            args.in_channels = 4
+    elif args.encoding == 'voxel':
+            args.in_channels = 10*args.dt*2
 
     args.gt_path = os.path.join(args.root_dir, args.testenv, args.testenv + '_gt.hdf5')
     args.hdf5_path = os.path.join(args.root_dir, args.testenv, args.testenv + '_data.hdf5')
 
     timestamp = timestamp = datetime.now().strftime("%m-%d-%H:%M")
 
-    args.save_path = os.path.join(args.save_path, 'dt'+str(args.dt), timestamp)
+    args.save_path = os.path.join(args.save_path, 'dt'+str(args.dt), args.arch, timestamp)
 
     if not os.path.exists(args.save_path):
             os.makedirs(args.save_path)
 
-    args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
     return args

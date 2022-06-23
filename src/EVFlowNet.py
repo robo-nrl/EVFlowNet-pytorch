@@ -6,14 +6,16 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 import torchvision.transforms.functional as F
 
-_BASE_CHANNELS = 64
+
 
 class EVFlowNet(nn.Module):
     def __init__(self, args):
         super(EVFlowNet,self).__init__()
         self._args = args
 
-        self.encoder1 = general_conv2d(in_channels = 4, out_channels=_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)
+        _BASE_CHANNELS = args.base_channels
+
+        self.encoder1 = general_conv2d(in_channels = args.in_channels, out_channels=_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)
         self.encoder2 = general_conv2d(in_channels = _BASE_CHANNELS, out_channels=2*_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)
         self.encoder3 = general_conv2d(in_channels = 2*_BASE_CHANNELS, out_channels=4*_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)
         self.encoder4 = general_conv2d(in_channels = 4*_BASE_CHANNELS, out_channels=8*_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)
@@ -91,10 +93,11 @@ if __name__ == "__main__":
     print(TrainSet.length)
     EventDataLoader = torch.utils.data.DataLoader(dataset=TrainSet, batch_size=args.batch_size, shuffle=True)
 
-    for input_, gray in EventDataLoader:
-        input_ = input_.to(args.device)
-        a = time.time()
-        output = model(input_)
-        print(output['flow0'].shape, output['flow1'].shape, output['flow2'].shape, output['flow3'].shape)
-        b = time.time()
-        print(b-a)
+    itr = iter(EventDataLoader)
+    input_, gray = itr.next()
+    input_ = input_.to(args.device)
+    a = time.time()
+    output = model(input_)
+    print(output['flow0'].shape, output['flow1'].shape, output['flow2'].shape, output['flow3'].shape)
+    b = time.time()
+    print(b-a)

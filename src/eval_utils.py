@@ -36,11 +36,14 @@ def flow_error_dense(flow_gt, flow_pred, event_img, is_car=False):
     n_points = EE.shape[0]
     AEE = np.mean(EE)
 
+    EE_gt = np.linalg.norm(gt_masked, axis=-1)
+    AEE_gt = np.mean(EE_gt)
+
     # Percentage of points with EE < 3 pixels.
     thresh = 3.
     percent_AEE = float((EE < thresh).sum()) / float(EE.shape[0] + 1e-5)
 
-    return AEE, percent_AEE, n_points
+    return AEE, percent_AEE, n_points, AEE_gt
 
 """
 Propagates x_indices and y_indices by their flow, as defined in x_flow, y_flow.

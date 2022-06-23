@@ -3,6 +3,9 @@ import os
 import time
 import cv2
 import pdb
+import json
+
+from torch.utils.tensorboard import SummaryWriter
 
 import numpy as np
 import torch
@@ -17,6 +20,7 @@ from data_loader import EventData
 from eval_utils import *
 from vis_utils import *
 from EVFlowNet import EVFlowNet
+from util import flow2rgb
 
 def drawImageTitle(img, title):
     cv2.putText(img,
@@ -29,15 +33,15 @@ def drawImageTitle(img, title):
                 bottomLeftOrigin=False)
     return img
 
-def test(args, EventDataLoader, model):
+def test(args, EventDataLoader, model, epoch, flow_writer1000):
     if args.render:
-        cv2.namedWindow('EV-FlowNet Results', cv2.WINDOW_NORMAL)
+        cv2.namedWindow(args.arch + ' Results', cv2.WINDOW_NORMAL)
 
     if args.gt_path:
         print("Loading ground truth {}".format(args.gt_path))
         d_gt = h5py.File(args.gt_path, 'r')
-        gt_flow_raw = np.float32(d_gt['davis']['left']['flow_dist'])
-        gt_ts = np.float64(d_gt['davis']['left']['flow_dist_ts'])
+        gt_flow_raw = d_gt['davis']['left']['flow_dist']
+        gt_ts = d_gt['davis']['left']['flow_dist_ts']
         print('Ground truth size: ', gt_flow_raw.shape)
         d_gt = None
 
@@ -55,6 +59,10 @@ def test(args, EventDataLoader, model):
     AEE_sum = 0.
     percent_AEE_sum = 0.
     AEE_list = []
+
+    AEE_gt_sum = 0.
+    AEE_gt_list = []
+
 
     if args.save_test_output:
         output_flow_list = []
@@ -126,13 +134,16 @@ def test(args, EventDataLoader, model):
                 gt_flow = gt_flow[yoff:-yoff, xoff:-xoff, :]       
             
                 # Calculate flow error.
-                AEE, percent_AEE, n_points = flow_error_dense(gt_flow, 
+                AEE, percent_AEE, n_points, AEE_gt = flow_error_dense(gt_flow, 
                                                             pred_flow, 
                                                             count_image,
                                                             'outdoor' in args.testenv)
                 AEE_list.append(AEE)
                 AEE_sum += AEE
                 percent_AEE_sum += percent_AEE
+
+                AEE_gt_list.append(AEE_gt)
+                AEE_gt_sum += AEE_gt
                     
                 iters += 1
                 if idx % 1000 == 0 and idx>10:
@@ -142,10 +153,16 @@ def test(args, EventDataLoader, model):
                         .format(idx, iters, fp_time, time.time()-base_time,
                                 max_flow_sum/iters, min_flow_sum/iters))
                     if args.gt_path:
-                        print('Mean AEE: {:.2f}, mean %AEE: {:.2f}, # pts: {:.2f}'
+                        print('Mean AEE: {:.2f}, Mean AEE_gt: {:.2f}, mean %AEE: {:.2f}, # pts: {:.2f}'
                             .format(AEE_sum/iters,
+                                    AEE_gt_sum/iters,
                                     percent_AEE_sum/iters,
                                     n_points))
+
+                #Log the 1000th flow output to tensorboard
+                # if idx == 1000 and flow_writer1000 is not None:
+                #     pred_flow_rgb = flow_viz_np(pred_flow[..., 0], pred_flow[..., 1])
+                #     flow_writer1000.add_image('FlowNet Outputs', flow2rgb(flow_dict['flow3'], max_value=10), epoch)
 
                 # Prep outputs for nice visualization.
                 if args.render:
@@ -199,26 +216,27 @@ def test(args, EventDataLoader, model):
                     bottom_cat = np.concatenate([time_image, errors, gt_flow_rgb], axis=1)
                     cat = np.concatenate([top_cat, bottom_cat], axis=0)
                     cat = cat.astype(np.uint8)
-                    cv2.imshow('EV-FlowNet Results', cat)
+                    cv2.imshow(args.arch + ' Results', cat)
                     cv2.waitKey(1)
 
                     # pdb.set_trace()
                     
     print('Testing done. ')
     if args.gt_path:
-        print('Mean AEE {:02f}, mean %AEE {:02f}'
+        print('Mean AEE {:02f},  Mean AEE_gt: {:.2f}, mean %AEE {:02f}'
             .format(AEE_sum/iters, 
+                    AEE_gt_sum/iters,
                     percent_AEE_sum/iters))
     if args.save_test_output:
         if args.gt_path:
             print('Saving data to {}_output_gt.npz'.format(args.test_sequence))
-            np.savez('{}_output_gt.npz'.format(args.test_sequence),
+            np.savez(os.path.join(args.save_path, '{}_output_gt.npz').format(args.test_sequence),
                     output_flows=np.stack(output_flow_list, axis=0),
                     gt_flows=np.stack(gt_flow_list, axis=0),
                     event_images=np.stack(event_image_list, axis=0))
         else:
             print('Saving data to {}_output.npz'.format(args.test_sequence))
-            np.savez('{}_output.npz'.format(args.test_sequence),
+            np.savez(os.path.join(args.save_path, '{}_output.npz').format(args.test_sequence),
                     output_flows=np.stack(output_flow_list, axis=0),
                     event_images=np.stack(event_image_list, axis=0))
 
@@ -244,7 +262,7 @@ def main():
     EventDataset = EventData(data_folder_path=args.root_dir, split='test', dt=args.dt, transform=test_transform)
     EventDataLoader = torch.utils.data.DataLoader(dataset=EventDataset, batch_size=1, shuffle=False)
 
-    EPE = test(args, EventDataLoader, model)
+    EPE = test(args, EventDataLoader, model, 0, None)
 
 
 if __name__ == "__main__":
