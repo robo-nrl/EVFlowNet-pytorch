@@ -85,7 +85,7 @@ def configs():
     parser.add_argument('--learning-rate-decay',
                         type=float,
                         help='Rate at which the learning rate is decayed.',
-                        default=0.9)
+                        default=0.75)#0.9
     parser.add_argument('--smoothness-weight',
                         type=float,
                         help='Weight for the smoothness term in the loss function.',
