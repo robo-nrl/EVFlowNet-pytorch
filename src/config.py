@@ -15,7 +15,7 @@ def configs():
 
     parser.add_argument("--root-dir",
                         help="Root directory to save encoded data",
-                        default='/local/a/akosta/Datasets/MVSEC/')
+                        default='/local/a/datasets/MVSEC/')
     parser.add_argument("--trainenv",
                         help="Environment Name",
                         choices=['indoor_flying1', 
@@ -167,7 +167,5 @@ def configs():
 
     if not os.path.exists(args.save_path):
             os.makedirs(args.save_path)
-
-
 
     return args

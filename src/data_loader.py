@@ -344,7 +344,7 @@ if __name__ == "__main__":
         transforms.ToTensor(),
     ])
 
-    #Test EVF
+    #Test Time Encoding
     # data = EventData(data_folder_path='/local/a/akosta/Datasets/MVSEC/', split='train', dt=4, transform=train_transform)
     # print(data.length)
     # EventDataLoader = torch.utils.data.DataLoader(dataset=data, batch_size=1, shuffle=False)
